@@ -1,26 +1,33 @@
+```markdown
 # Portfolio Platform Backend
 
-A secure, high-performance Python/Flask backend serving the Next.js 15 portfolio platform frontend ([turiya_portfolio_platform](https://github.com/turiya-portfolio-platform)). 
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-3.0.3-black?style=flat-square&logo=flask)](https://flask.palletsprojects.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![pytest](https://img.shields.io/badge/pytest-8.3.3-0A9EDC?style=flat-square&logo=pytest)](https://docs.pytest.org/)
+[![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=flat-square&logo=github-actions)](https://github.com/Aaryan-Thaker/portfolio-backend/actions)
 
-Built for serverless execution on **Vercel** with a **PostgreSQL** database, this service provides portfolio tracking, automated FIFO lot accounting, XIRR annualized performance calculations, risk assessment profiling, and external market data lookups with in-memory TTL caching.
+A secure, high-performance Python/Flask REST API serving the Next.js 15 portfolio platform frontend ([turiya_portfolio_platform](https://github.com/Aaryan-Thaker/turiya_portfolio_platform)).
+
+This service handles portfolio valuation, automated FIFO (First-In, First-Out) lot accounting, annualized performance calculations (XIRR), risk assessment profiling, and external market data lookups backed by PostgreSQL and in-memory TTL caching.
 
 ---
 
 ## Features
 
-- **Google OAuth Authentication**: Token verification via `google-auth` validating bearer tokens forwarded by the Next.js API proxy (`/api/proxy/*`), with UUID-mapped user records in PostgreSQL.
-- **FIFO Accounting & Valuation Engine**: Accurate First-In, First-Out (FIFO) cost basis calculation for Buy and Sell lots, real-time portfolio market valuation, realized and unrealized capital gains breakdowns, and Newton-Raphson XIRR return calculations.
+- **Google OAuth Token Verification**: Decorator-based token verification via `google-auth` validating bearer tokens forwarded by the Next.js API proxy (`/api/proxy/*`), with UUID-mapped user records stored in PostgreSQL.
+- **FIFO Accounting & Valuation Engine**: Accurate First-In, First-Out cost-basis tracking for Buy and Sell lots, real-time portfolio market valuation, realized and unrealized capital gains breakdowns, and Newton-Raphson XIRR return calculations.
 - **TTL In-Memory Market Data Cache**: External quotes and index lookups (`yfinance`) are cached in memory using `cachetools.TTLCache` (5-minute TTL, 256-item ticker cache & 32-item index cache) with graceful fallbacks to protect against third-party rate limits.
-- **Dynamic & Hardened CORS**: Safe CORS resolution configured dynamically from `ALLOWED_ORIGINS`, supporting credentialed requests (`Access-Control-Allow-Credentials: true`) without insecure wildcard origins.
+- **Hardened CORS Policy**: Dynamic origin resolution configured strictly from `ALLOWED_ORIGINS`, supporting credentialed requests (`Access-Control-Allow-Credentials: true`) without insecure wildcard fallbacks.
 - **Risk Profiling Engine**: Multi-factor questionnaire evaluation determining investor risk tolerance brackets (Defensive, Moderate, Aggressive, Very Aggressive).
-- **Automated CI/CD**: Fully tested test suite with `pytest` running on GitHub Actions across Python 3.11 environments.
+- **Automated CI/CD**: Pytest suite integrated with GitHub Actions running continuous test verification across Python 3.11 environments.
 
 ---
-
+```
 ## Project Structure
 
 ```text
-PortoflioBackend/
+portfolio-backend/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml               # GitHub Actions CI workflow (Python 3.11 + pytest)
@@ -49,7 +56,8 @@ PortoflioBackend/
 ├── .env.example                 # Template for required environment variables
 ├── .gitignore                   # Ignored files (secrets, caches, virtualenvs)
 ├── requirements.txt             # Root dependency reference (-r api/requirements.txt)
-└── vercel.json                  # Vercel serverless function routing configuration
+└── vercel.json                  # Serverless function rewrite rules
+
 ```
 
 ---
@@ -60,19 +68,19 @@ Copy `.env.example` to `.env` for local development:
 
 ```bash
 cp .env.example .env
+
 ```
 
 | Variable | Description | Example / Default |
-| :--- | :--- | :--- |
-| `FLASK_ENV` | Application environment (`development`, `production`, `testing`) | `development` |
-| `FLASK_SECRET_KEY` | Secret key for session security (**mandatory in production**) | `dev_secret_key_change_in_production` |
-| `DATABASE_URL` | PostgreSQL connection string with host and database name | `postgresql://postgres:postgres@localhost:5432/portfolio_db` |
-| `GOOGLE_CLIENT_ID` | Google OAuth Client ID for verifying ID tokens | `your_google_client_id.apps.googleusercontent.com` |
-| `ALLOWED_ORIGINS` | Comma-separated origins allowed to make CORS requests | `http://localhost:3000,https://turiya-portfolio-platform.vercel.app` |
-| `PORT` | Local server port | `5000` |
+| --- | --- | --- |
+| `FLASK_ENV` | Application runtime environment (`development`, `production`, `testing`) | `development` |
+| `FLASK_SECRET_KEY` | Cryptographic secret for session security (**mandatory in production**) | `dev_secret_key_change_in_production` |
+| `DATABASE_URL` | PostgreSQL connection URI | `postgresql://postgres:postgres@localhost:5432/portfolio_db` |
+| `GOOGLE_CLIENT_ID` | Google OAuth Client ID for validating ID tokens | `your_google_client_id.apps.googleusercontent.com` |
+| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | `http://localhost:3000` |
+| `PORT` | Local runtime port | `5000` |
 
-> [!IMPORTANT]
-> When `FLASK_ENV=production`, the application strictly requires `FLASK_SECRET_KEY` to be configured. If it is omitted or empty, `create_app()` will raise a `ValueError` to prevent deploying with insecure default secrets.
+> **Security Note:** When `FLASK_ENV=production`, `FLASK_SECRET_KEY` must be set explicitly. If missing or left empty, `create_app()` raises a `ValueError` immediately at boot to prevent operating with insecure default keys.
 
 ---
 
@@ -83,32 +91,32 @@ All protected endpoints require an `Authorization: Bearer <google_id_token>` hea
 ### System & Authentication
 
 | Method | Endpoint | Auth | Description |
-| :--- | :--- | :---: | :--- |
+| --- | --- | --- | --- |
 | `GET` | `/api/ping` | No | Base health check endpoint (returns `{"ping": "pong"}`). |
 | `POST` | `/api/oauth/login` | Yes | Verifies Google ID token, registers or retrieves user, and returns profile. |
 
 ### Portfolio & Valuation
 
 | Method | Endpoint | Auth | Description |
-| :--- | :--- | :---: | :--- |
+| --- | --- | --- | --- |
 | `GET` | `/api/portfolio` | Yes | Returns overall valuation, sector allocations, holdings, and cached indices. |
-| `GET` | `/api/portfolio/valuation` | Yes | Returns detailed valuation metrics, invested cost, and gains. |
-| `GET` | `/api/stock/validate` | Yes | Validates ticker symbol (e.g. `?ticker=AAPL`) using TTL-cached market data. |
+| `GET` | `/api/portfolio/valuation` | Yes | Returns valuation trajectory metrics, total invested cost, and gains. |
+| `GET` | `/api/stock/validate` | Yes | Validates ticker symbol (e.g., `?ticker=AAPL`) using TTL-cached market data. |
 
 ### Transactions Management
 
 | Method | Endpoint | Auth | Description |
-| :--- | :--- | :---: | :--- |
-| `GET` | `/api/transactions` | Yes | Retrieves authenticated user's transactions enriched with live stock info. |
-| `POST` | `/api/transactions` | Yes | Adds a single transaction (`type`, `stock`, `quantity`, `price`, `date`, `notes`). |
-| `POST` | `/api/transactions/bulk` | Yes | Bulk uploads transactions via JSON array or raw CSV payload. |
-| `GET` | `/api/transactions/summary`| Yes | Returns total invested, total value, realized/unrealized gains, and XIRR. |
-| `POST` | `/api/transactions/clear` | Yes | Deletes all transactions for the authenticated user. |
+| --- | --- | --- | --- |
+| `GET` | `/api/transactions` | Yes | Retrieves authenticated user's transactions enriched with market data. |
+| `POST` | `/api/transactions` | Yes | Records a single transaction (`type`, `stock`, `quantity`, `price`, `date`, `notes`). |
+| `POST` | `/api/transactions/bulk` | Yes | Bulk uploads transactions via JSON array or CSV payload. |
+| `GET` | `/api/transactions/summary` | Yes | Returns total invested, total value, realized/unrealized gains, and XIRR. |
+| `POST` | `/api/transactions/clear` | Yes | Purges all transactions for the authenticated user. |
 
 ### Risk Assessment
 
 | Method | Endpoint | Auth | Description |
-| :--- | :--- | :---: | :--- |
+| --- | --- | --- | --- |
 | `GET` | `/api/risk/questionnaire` | No | Retrieves questions and weighting options for the risk assessment. |
 | `POST` | `/api/risk/submit` | Yes | Submits questionnaire answers, stores profile, and computes risk bracket. |
 | `GET` | `/api/risk/profile` | Yes | Retrieves the latest computed risk profile for the user. |
@@ -118,23 +126,26 @@ All protected endpoints require an `Authorization: Bearer <google_id_token>` hea
 ## Local Setup & Development
 
 ### 1. Prerequisites
-- Python 3.11+
-- PostgreSQL database (or Supabase / Neon PostgreSQL instance)
-- Git
+
+* Python 3.11+
+* PostgreSQL instance running locally or via cloud (Neon, Supabase)
+* Git
 
 ### 2. Clone and Setup Environment
 
 ```bash
-git clone https://github.com/aaryanthaker/PortoflioBackend.git
-cd PortoflioBackend
+git clone git@github.com:Aaryan-Thaker/portfolio-backend.git
+cd portfolio-backend
 
 # Create and activate virtual environment
 python -m venv .venv
 
 # On Linux/macOS:
 source .venv/bin/activate
-# On Windows (PowerShell):
-.venv\Scripts\Activate.ps1
+
+# On Windows (Git Bash):
+source .venv/Scripts/activate
+
 ```
 
 ### 3. Install Dependencies
@@ -142,32 +153,36 @@ source .venv/bin/activate
 ```bash
 pip install --upgrade pip
 pip install -r api/requirements.txt
+
 ```
 
 ### 4. Configure Environment
 
 ```bash
 cp .env.example .env
-# Edit .env with your PostgreSQL credentials and Google Client ID
+# Edit .env with your local PostgreSQL credentials and Google Client ID
+
 ```
 
-### 5. Run the Application
+### 5. Start the Server
 
 ```bash
 python api/index.py
+
 ```
 
-The server will start at `http://localhost:5000`. You can verify it with:
+The server will start at `http://localhost:5000`. Test connectivity with:
 
 ```bash
 curl http://localhost:5000/api/ping
+
 ```
 
 ---
 
 ## Running Tests
 
-The test suite uses `pytest` and mocks external dependencies (PostgreSQL, Google OAuth token verification, and Yahoo Finance) to ensure fast, deterministic runs:
+The test suite uses `pytest` and mocks external dependencies (PostgreSQL queries, Google OAuth token verification, and Yahoo Finance network calls) for deterministic offline execution:
 
 ```bash
 # Run all unit tests
@@ -175,26 +190,12 @@ pytest -v
 
 # Run with coverage report
 pytest --cov=api tests/
+
 ```
 
 ---
 
-## Deployment (Vercel)
+## Related Repositories
 
-The repository is configured for zero-config serverless deployment via [`vercel.json`](file:///c:/Users/Aarya/projects/PortoflioBackend/vercel.json):
+* **Frontend Web Application:** [Aaryan-Thaker/turiya_portfolio_platform](https://www.google.com/url?sa=E&source=gmail&q=https://github.com/Aaryan-Thaker/turiya_portfolio_platform) – Next.js 15 client dashboard featuring Plotly.js charts, AG Grid, and server-side NextAuth API proxying.
 
-1. Link the repository to your Vercel project:
-   ```bash
-   vercel
-   ```
-2. Configure environment variables in the Vercel Dashboard under **Project Settings > Environment Variables**:
-   - `FLASK_ENV`: `production`
-   - `FLASK_SECRET_KEY`: *(Generate a secure random 32+ character string)*
-   - `DATABASE_URL`: `postgresql://user:password@host:5432/dbname?sslmode=require`
-   - `GOOGLE_CLIENT_ID`: `your_client_id.apps.googleusercontent.com`
-   - `ALLOWED_ORIGINS`: `https://turiya-portfolio-platform.vercel.app,http://localhost:3000`
-
-3. Deploy to production:
-   ```bash
-   vercel --prod
-   ```
