@@ -17,14 +17,41 @@ from api.finance.risk import risk_bp               # For risk questionnaire endp
 logging.basicConfig(level=logging.INFO)  # DEBUG locally, INFO in prod
 logger = logging.getLogger(__name__)
 
-def create_app():
-    app = Flask(__name__)
-    CORS(app, supports_credentials=True)
+DEFAULT_ALLOWED_ORIGINS = "http://localhost:3000,https://turiya-portfolio-platform.vercel.app"
 
-    # Secret key - ensure this is set in Vercel env
-    app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
-    if app.secret_key == "dev-secret":
-        logger.warning("⚠️ Using fallback secret key! Set FLASK_SECRET_KEY in production.")
+
+def create_app(test_config=None):
+    app = Flask(__name__)
+    if test_config:
+        app.config.update(test_config)
+
+    # Resolve environment and secrets
+    flask_env = os.environ.get("FLASK_ENV", "development").lower()
+    secret_key = app.config.get("SECRET_KEY") or os.environ.get("FLASK_SECRET_KEY")
+
+    if flask_env == "production":
+        if not secret_key:
+            raise ValueError("FLASK_SECRET_KEY environment variable must be set in production")
+        app.secret_key = secret_key
+    elif flask_env == "development":
+        app.secret_key = secret_key or "dev_secret_key_change_in_production"
+        if not secret_key:
+            logger.warning("⚠️ Running in development with fallback secret key. Set FLASK_SECRET_KEY in production.")
+    else:
+        # e.g. testing or custom non-prod environments
+        app.secret_key = secret_key or "dev_secret_key_change_in_production"
+
+    # Configure CORS reading dynamically from ALLOWED_ORIGINS
+    raw_origins = os.environ.get("ALLOWED_ORIGINS", DEFAULT_ALLOWED_ORIGINS)
+    allowed_origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": allowed_origins}},
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    )
 
     # Register blueprints (no url_prefix to keep existing route names unchanged)
     app.register_blueprint(auth_bp)
@@ -36,13 +63,15 @@ def create_app():
     def ping():
         return jsonify({'ping': 'pong'})
 
-    # Ensure DB tables exist
-    try:
-        ensure_tables()
-    except Exception:
-        logger.exception("Error ensuring tables at startup")
+    # Ensure DB tables exist (skip during unit testing)
+    if not app.config.get("TESTING"):
+        try:
+            ensure_tables()
+        except Exception:
+            logger.exception("Error ensuring tables at startup")
 
     return app
+
 
 app = create_app()
 

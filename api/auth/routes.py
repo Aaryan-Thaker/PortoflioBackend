@@ -1,7 +1,5 @@
-# api/routes/auth_routes.py
+# api/auth/routes.py
 
-import os
-import json
 import logging
 from flask import Blueprint, request, jsonify, make_response
 
@@ -14,30 +12,20 @@ logger.addHandler(logging.NullHandler())
 auth_bp = Blueprint("auth_bp", __name__)
 
 
-def cors_response(data=None, status=200):
-    """Return JSON response with CORS headers attached."""
-    response = make_response(data or "")
-    response.status_code = status
-    response.headers.add("Access-Control-Allow-Origin", "*")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-    response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PUT,DELETE")
-    return response
-
-
 @auth_bp.route("/api/oauth/login", methods=["POST", "OPTIONS"])
 @google_jwt_required
 def oauth_login():
     if request.method == "OPTIONS":
-        return cors_response()
+        return make_response("", 200)
 
     try:
         # Extract user info from verified Google ID token
-        id_info = request.user_info
+        id_info = getattr(request, "user_info", {})
         email = id_info.get("email")
         name = id_info.get("name") or "User"
 
         if not email:
-            return cors_response(jsonify({"success": False, "error": "Email required"}), 400)
+            return jsonify({"success": False, "error": "Email required"}), 400
 
         # Check if user exists by email
         row = db_query(
@@ -62,8 +50,8 @@ def oauth_login():
             )
             user = dict(row)
 
-        return cors_response(jsonify({"success": True, "user": user}), 200)
+        return jsonify({"success": True, "user": user}), 200
 
     except Exception as e:
         logger.exception("OAuth login error: %s", e)
-        return cors_response(jsonify({"success": False, "error": str(e)}), 500)
+        return jsonify({"success": False, "error": str(e)}), 500

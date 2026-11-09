@@ -68,15 +68,7 @@ def get_risk_questionnaire():
 @google_jwt_required
 def submit_risk():
     if request.method == "OPTIONS":
-        resp = make_response()
-        origin = request.headers.get("Origin", "*")
-        resp.headers.update({
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            "Access-Control-Allow-Credentials": "true"
-        })
-        return resp
+        return make_response("", 200)
 
     try:
         payload = request.get_json(silent=True)

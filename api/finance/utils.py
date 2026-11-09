@@ -12,15 +12,22 @@ This file is designed to be robust to missing keys returned by yfinance.
 
 import logging
 from datetime import datetime, date
-from functools import lru_cache
 from typing import List, Dict, Any, Optional, Tuple
 import math
 from decimal import Decimal
 
+from cachetools import TTLCache, cached
 import yfinance as yf
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+# In-memory TTL cache for external market quotes (5 minutes TTL, max 256 items)
+stock_info_cache = TTLCache(maxsize=256, ttl=300)
+
+
+def _stock_cache_key(ticker: str) -> str:
+    return (ticker or '').strip().upper()
 
 
 # ---------------------- Helpers / Normalization ----------------------
@@ -40,13 +47,14 @@ def _to_float_safe(v: Any) -> Optional[float]:
             return None
 
 
-@lru_cache(maxsize=512)
+@cached(cache=stock_info_cache, key=_stock_cache_key)
 def get_stock_info(ticker: str) -> Dict[str, Any]:
     """Return a normalized stock info dict for the given ticker.
 
     This version will attempt multiple ticker variants (original, .NS, .BO)
     to improve coverage for Indian tickers. It returns a normalized dict
     including 'symbol' (the resolved symbol) and 'currency'.
+    Caches lookups in memory with a 5-minute TTL.
     """
     ticker_in = (ticker or '').strip().upper()
     if not ticker_in:
@@ -201,6 +209,40 @@ def get_stock_info(ticker: str) -> Dict[str, Any]:
     info_out.setdefault('currency', 'USD')
     info_out.setdefault('shortName', ticker_in)
     return info_out
+
+
+# In-memory TTL cache for market indices (^IXIC, ^GSPC, ^DJI, etc.)
+index_quote_cache = TTLCache(maxsize=32, ttl=300)
+
+
+@cached(cache=index_quote_cache)
+def get_index_quote(idx_symbol: str) -> Dict[str, Any]:
+    """Fetch and cache major market index quotes with 5-minute TTL."""
+    try:
+        t = yf.Ticker(idx_symbol)
+        info = getattr(t, 'info', {}) or {}
+        price = info.get('regularMarketPrice') or info.get('previousClose') or info.get('currentPrice')
+        prev = info.get('previousClose') or info.get('regularMarketPreviousClose')
+
+        if price is not None and prev:
+            try:
+                change = float(price) - float(prev)
+                change_pct = (change / float(prev)) if float(prev) != 0 else 0.0
+            except Exception:
+                change = 0.0
+                change_pct = 0.0
+        else:
+            change = _to_float_safe(info.get('regularMarketChange') or info.get('change')) or 0.0
+            change_pct = _to_float_safe(info.get('regularMarketChangePercent') or info.get('changePercent')) or 0.0
+
+        return {
+            'price': _to_float_safe(price),
+            'change': float(change),
+            'change_pct': float(change_pct),
+        }
+    except Exception as e:
+        logger.warning("Failed to fetch index quote for %s: %s", idx_symbol, e)
+        return {'price': None, 'change': 0.0, 'change_pct': 0.0}
 
 
 # ---------------------- Holdings / Transactions helpers ----------------------

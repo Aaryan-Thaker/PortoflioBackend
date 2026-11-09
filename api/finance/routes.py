@@ -14,6 +14,7 @@ from api.finance.transactions.csv_upload import validate_and_normalize_transacti
 from api.finance.models import fetch_transactions_for_user, insert_transaction_locked
 from api.finance.utils import (
     get_stock_info,
+    get_index_quote,
     compute_holdings_from_transactions,
     calculate_portfolio_xirr,
     capital_gains_breakdown,
@@ -28,15 +29,7 @@ finance_bp = Blueprint('finance_bp', __name__)
 
 # ---------------------- Helper: handle OPTIONS ----------------------
 def _cors_options():
-    resp = make_response()
-    origin = request.headers.get('Origin', '*')
-    resp.headers.update({
-        'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Methods': "GET, POST, OPTIONS",
-        'Access-Control-Allow-Headers': "Content-Type, Authorization",
-        'Access-Control-Allow-Credentials': "true"
-    })
-    return resp
+    return make_response("", 200)
 
 
 # ---------------------- Helper: enhance transactions list ----------------------
@@ -330,49 +323,11 @@ def portfolio_tracker_api():
             (user_id,), fetchone=True
         ) or {}).get('profile_json')
 
-        # Market overview: attempt to fetch three major indices
+        # Market overview: attempt to fetch three major indices (TTL cached)
         market_data = {}
-        try:
-            index_map = {'nasdaq': '^IXIC', 'sp500': '^GSPC', 'dow': '^DJI'}
-            for key, idx_symbol in index_map.items():
-                try:
-                    t = yf.Ticker(idx_symbol)
-                    info = t.info or {}
-                    price = info.get('regularMarketPrice') or info.get('previousClose') or info.get('currentPrice') or None
-                    # try to compute change and pct robustly
-                    prev = info.get('previousClose') or info.get('regularMarketPreviousClose') or None
-                    if price is not None and prev:
-                        change = price - float(prev)
-                        change_pct = (change / float(prev)) if float(prev) != 0 else 0.0
-                    else:
-                        change = info.get('regularMarketChange') or info.get('change') or 0.0
-                        change_pct = info.get('regularMarketChangePercent') or info.get('changePercent') or 0.0
-
-                    # ensure numeric types
-                    try:
-                        price = float(price) if price is not None else None
-                    except Exception:
-                        price = None
-                    try:
-                        change = float(change)
-                    except Exception:
-                        change = 0.0
-                    try:
-                        change_pct = float(change_pct)
-                    except Exception:
-                        change_pct = 0.0
-
-                    market_data[key] = {
-                        'price': price,
-                        'change': change,
-                        # frontend expects change_pct as decimal (e.g., 0.01 for 1%). SummaryTab multiplies by 100,
-                        # but original code expected data.change_pct to multiply by 100. To be safe, provide decimal.
-                        'change_pct': change_pct,
-                    }
-                except Exception:
-                    market_data[key] = {'price': None, 'change': None, 'change_pct': None}
-        except Exception:
-            market_data = {}
+        index_map = {'nasdaq': '^IXIC', 'sp500': '^GSPC', 'dow': '^DJI'}
+        for key, idx_symbol in index_map.items():
+            market_data[key] = get_index_quote(idx_symbol)
 
         return jsonify(_sanitize_obj({
             'success': True,
@@ -531,9 +486,10 @@ def validate_ticker_api():
         return jsonify({'valid': False, 'error': 'Ticker missing'}), 400
 
     try:
-        t = yf.Ticker(ticker)
-        info = t.info or {}
-        valid = bool(info and info.get('symbol'))
+        info = get_stock_info(ticker)
+        has_symbol = bool(info and info.get('symbol'))
+        has_data = info.get('price') is not None or (info.get('shortName') and info.get('shortName') != ticker)
+        valid = has_symbol and has_data
         if not valid:
             return jsonify({'valid': False})
 
